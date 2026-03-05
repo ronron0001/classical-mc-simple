@@ -1,0 +1,10 @@
+# Simulation parameters: 2D XY model on square lattice (quick setting)
+Burn_in    = 500
+Total_Step = 3000
+Sample     = 2
+num_temp   = 6
+Ini_T      = 0.8
+Delta_T    = 0.1
+lambda     = 1.0
+H          = 0.0
+spin_dim   = 2

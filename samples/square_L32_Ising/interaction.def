@@ -1,0 +1,5 @@
+# Interaction definition: 2D square lattice NN bonds
+# Sign convention in this code: E ~ + J (S_i . S_j)
+# Therefore ferromagnetic coupling is J < 0.
+0  0   1  0  0  -1.0
+0  0   0  1  0  -1.0

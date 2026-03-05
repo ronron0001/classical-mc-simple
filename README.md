@@ -70,9 +70,109 @@ Definitions:
 
 ## Input Files
 
-- `param.def`: simulation parameters (`Burn_in`, `Total_Step`, `Sample`, `num_temp`, `Ini_T`, `Delta_T`, `spin_dim`, `lambda`, `H`)
-- `lattice.def`: lattice size (`L_x`, `L_y`, `L_z`) and orbital count (`orb_num`)
-- `interaction.def`: bond list (`i_orb j_orb dx dy dz J`)
+- `param.def`: simulation parameters
+- `lattice.def`: lattice size and orbital count
+- `interaction.def`: bond list
+
+### `param.def` format
+
+Use one `key = value` pair per line:
+
+```text
+Burn_in    = 2000
+Total_Step = 15000
+Sample     = 4
+num_temp   = 30
+Ini_T      = 0.75
+Delta_T    = 0.01
+lambda     = 1.0
+H          = 0.0
+spin_dim   = 2
+output_spin = 0
+init_state  = 0
+```
+
+Supported keys:
+
+- `Burn_in` (int): burn-in MC sweeps
+- `Total_Step` (int): measurement MC sweeps
+- `Sample` (int): number of independent runs
+- `num_temp` (int): number of temperature slots
+- `Ini_T` (double): first temperature
+- `Delta_T` (double): temperature increment (`T = Ini_T + i * Delta_T`)
+- `lambda` (double): z-anisotropy factor in interaction term
+- `H` (double): field coupled to `S_z`
+- `spin_dim` (int): `1` (Ising), `2` (XY), `3` (Heisenberg)
+- `output_spin` (int, optional): `0` off, `1` on
+- `init_state` (int, optional): initial spin mode
+  - `0`: random
+  - `1`: FM
+  - `2`: AF (Neel)
+  - `3`: stripe `(pi,0)`
+  - `4`: stripe `(0,pi)`
+
+Notes:
+
+- Lines beginning with `#` and blank lines are ignored.
+- Keep the `key = value` style.
+- Unknown keys are ignored with a warning.
+
+### `lattice.def` format
+
+Use one `key = value` pair per line:
+
+```text
+L_x     = 16
+L_y     = 16
+L_z     = 1
+orb_num = 1
+```
+
+Supported keys:
+
+- `L_x`, `L_y`, `L_z` (int): lattice size in each direction
+- `orb_num` (int): number of orbitals per unit cell
+
+Derived quantity:
+
+- `All_N = L_x * L_y * L_z * orb_num`
+
+Notes:
+
+- Lines beginning with `#` and blank lines are ignored.
+- Unknown keys are ignored with a warning.
+
+### `interaction.def` format
+
+Each non-comment line must contain:
+
+```text
+i_orb  j_orb  dx  dy  dz  J
+```
+
+where:
+
+- `i_orb`, `j_orb` (int): orbital indices in `[0, orb_num-1]`
+- `dx`, `dy`, `dz` (int): unit-cell displacement from `i_orb` site to `j_orb`
+- `J` (double): bond coupling for that displaced pair
+
+Example (2D square nearest-neighbor bonds):
+
+```text
+# i_orb j_orb dx dy dz J
+0 0 1 0 0 1.0
+0 0 0 1 0 1.0
+```
+
+Notes:
+
+- `interaction.def` should list each unique bond once; reverse bonds are generated internally.
+- Sign convention in this code is `E ~ + J (S_i . S_j)`.
+- Therefore:
+  - `J < 0`: ferromagnetic
+  - `J > 0`: antiferromagnetic (on bipartite lattices, equivalent by sublattice spin flip at zero field)
+- Malformed lines or out-of-range orbital indices are skipped with warnings.
+- Neighbor counts are taken from this file to allocate bond tables (`ni_max`).
 
 ## Code Structure
 

@@ -1,0 +1,5 @@
+# Lattice definition: 2D square lattice
+L_x     = 24
+L_y     = 24
+L_z     = 1
+orb_num = 1

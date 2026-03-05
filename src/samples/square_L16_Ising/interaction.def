@@ -1,9 +1,0 @@
-# Interaction definition: 2D square lattice NN bonds
-# Each line defines one unique bond; the reverse direction is auto-generated.
-# Format: i_orb  j_orb  dx  dy  dz  J
-#
-# NN bonds (J = 1.0)
-# x-direction
-  0  0   1  0  0  1.0
-# y-direction
-  0  0   0  1  0  1.0
