@@ -1,4 +1,4 @@
-# MC_refactoring Step 1
+# Classical MC Simple (Step 1)
 
 This directory is a minimal, beginner-friendly equilibrium classical Monte Carlo implementation
 without MPI.
