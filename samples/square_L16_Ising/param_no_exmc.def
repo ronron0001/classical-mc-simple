@@ -1,4 +1,4 @@
-# Simulation parameters: 2D Ising model on square lattice (quick setting)
+# Same as param.def but EXMC disabled (for overlap comparison)
 Burn_in    = 500
 Total_Step = 3000
 Sample     = 2
@@ -8,4 +8,4 @@ Delta_T    = 0.3
 lambda     = 1.0
 H          = 0.0
 spin_dim   = 1
-use_exmc   = 1
+use_exmc   = 0

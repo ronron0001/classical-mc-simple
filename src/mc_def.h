@@ -26,6 +26,7 @@ struct DefineList {
 
     /* Simulation parameters */
     int Burn_in, Total_Step, Sample, num_temp;
+    int use_exmc; /* 1=enable EXMC (default), 0=disable */
     double Ini_T, Delta_T;
 
     /* Hamiltonian parameters */
@@ -224,5 +225,9 @@ void initial(dsfmt_t *dsfmt, struct BindStruct *X);
 
 /* mc_update.c */
 void MC(dsfmt_t *dsfmt, struct BindStruct *X);
+/* EXMC: try exchange between temperature slots i and j; return 1 if accepted */
+int exchange_try_pair(dsfmt_t *dsfmt, struct BindStruct *X, int i, int j);
+/* EXMC: one sweep of adjacent-pair exchanges (odd-even); return number accepted */
+int exchange_sweep_local(dsfmt_t *dsfmt, struct BindStruct *X);
 
 #endif /* MC_DEF_H */

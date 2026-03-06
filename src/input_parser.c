@@ -53,6 +53,7 @@ int read_param(const char *filename, struct DefineList *Def) {
     Def->spin_dim = 3;    /* Heisenberg */
     Def->output_spin = 0; /* skip spin output by default */
     Def->init_state = 0;  /* RANDOM */
+    Def->use_exmc = 1;    /* enable EXMC by default */
 
     fp = fopen(filename, "r");
     if (fp == NULL) {
@@ -90,6 +91,8 @@ int read_param(const char *filename, struct DefineList *Def) {
             Def->output_spin = atoi(val);
         } else if (strcmp(key, "init_state") == 0) {
             Def->init_state = atoi(val);
+        } else if (strcmp(key, "use_exmc") == 0) {
+            Def->use_exmc = atoi(val);
         } else {
             fprintf(stderr, "Warning: unknown key '%s' in '%s'\n", key,
                     filename);
@@ -99,8 +102,8 @@ int read_param(const char *filename, struct DefineList *Def) {
     fclose(fp);
 
     if (Def->myrank == MASTER) {
-        printf("read_param: Burn_in=%d Total_Step=%d Sample=%d num_temp=%d\n",
-               Def->Burn_in, Def->Total_Step, Def->Sample, Def->num_temp);
+        printf("read_param: Burn_in=%d Total_Step=%d Sample=%d num_temp=%d use_exmc=%d\n",
+               Def->Burn_in, Def->Total_Step, Def->Sample, Def->num_temp, Def->use_exmc);
         printf(
             "read_param: Ini_T=%lf Delta_T=%lf lambda=%lf H=%lf spin_dim=%d\n",
             Def->Ini_T, Def->Delta_T, Def->lambda, Def->H, Def->spin_dim);

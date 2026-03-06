@@ -2,6 +2,24 @@
 #include "memory.h"
 
 /*
+ * Overlap at temperature slot k: (1/N) sum_i s_i(step=0) · s_i(step=t).
+ * Same temperature, initial config vs current config.
+ */
+static double overlap_with_initial(struct BindStruct *X, struct SimpleWorkArrays *W, int k) {
+    int all_i, All_N;
+    double sum;
+
+    All_N = X->Def.All_N;
+    sum = 0.0;
+    for (all_i = 0; all_i < All_N; all_i++) {
+        sum += W->sx0[k][all_i] * X->Def.sx[k][all_i] +
+               W->sy0[k][all_i] * X->Def.sy[k][all_i] +
+               W->sz0[k][all_i] * X->Def.sz[k][all_i];
+    }
+    return sum / (double)All_N;
+}
+
+/*
  * Return instantaneous M^2 per site:
  *   M^2 = (Mx^2 + My^2 + Mz^2) / N^2
  * This is computed at each MC step, then averaged in time.
@@ -68,7 +86,8 @@ int main(int argc, char **argv) {
 
     int num_temp, All_N, ni_max;
     int Burn_in, Total_Step, Sample;
-    int int_samp, int_T, step;
+    int int_samp, int_T, step, k, all_i;
+    int n_ex_accept, total_ex_accept, total_ex_attempt;
     unsigned long base_seed;
     unsigned long seed;
     double Ini_T, Delta_T;
@@ -106,6 +125,7 @@ int main(int argc, char **argv) {
     Sample = X.Bind.Def.Sample;
     Ini_T = X.Bind.Def.Ini_T;
     Delta_T = X.Bind.Def.Delta_T;
+    int use_exmc = X.Bind.Def.use_exmc;
 
     if (num_temp <= 0 || All_N <= 0 || ni_max <= 0) {
         fprintf(stderr, "Error: invalid lattice/temperature setting\n");
@@ -123,7 +143,7 @@ int main(int argc, char **argv) {
         goto cleanup;
     }
 
-    if (allocate_work_arrays(num_temp, &W) != 0) {
+    if (allocate_work_arrays(num_temp, All_N, &W) != 0) {
         fprintf(stderr, "Error: memory allocation failed\n");
         goto cleanup;
     }
@@ -140,12 +160,16 @@ int main(int argc, char **argv) {
         }
     }
 
-    printf("MC_simple stage1 (no MPI, no exchange MC)\n");
+    printf("MC_simple %s (intra-process exchange, no MPI)\n",
+           use_exmc ? "with EXMC" : "without EXMC");
     printf("L=(%d,%d,%d) orb=%d spin_dim=%d All_N=%d ni_max=%d\n",
            X.Bind.Def.L_x, X.Bind.Def.L_y, X.Bind.Def.L_z, X.Bind.Def.orb_num,
            X.Bind.Def.spin_dim, All_N, ni_max);
     printf("Burn_in=%d Total_Step=%d Sample=%d num_temp=%d\n", Burn_in,
            Total_Step, Sample, num_temp);
+
+    total_ex_accept = 0;
+    total_ex_attempt = 0;
 
     /*
      * Outer loop over independent samples (different RNG seeds).
@@ -167,26 +191,46 @@ int main(int argc, char **argv) {
                 X.Bind.Phys.T = Ini_T + Delta_T * (double)int_T;
                 MC(&dsfmt, &(X.Bind));
             }
+            if (use_exmc)
+                exchange_sweep_local(&dsfmt, &(X.Bind));
         }
 
         memset(X.Bind.Phys.ratio_1, 0, (size_t)num_temp * sizeof(int));
         memset(W.sample_E, 0, (size_t)num_temp * sizeof(double));
         memset(W.sample_E2, 0, (size_t)num_temp * sizeof(double));
         memset(W.sample_M2, 0, (size_t)num_temp * sizeof(double));
+        memset(W.sample_overlap, 0, (size_t)num_temp * sizeof(double));
 
-        /* Measurement phase: update then record E/N, E^2, and M^2 each step. */
+        /* Save spin config at step 0 (start of measurement) for overlap. */
+        for (int_T = 0; int_T < num_temp; int_T++) {
+            for (all_i = 0; all_i < All_N; all_i++) {
+                W.sx0[int_T][all_i] = X.Bind.Def.sx[int_T][all_i];
+                W.sy0[int_T][all_i] = X.Bind.Def.sy[int_T][all_i];
+                W.sz0[int_T][all_i] = X.Bind.Def.sz[int_T][all_i];
+            }
+        }
+
+        /* Measurement phase: MC sweep -> (EXMC exchange if use_exmc) -> record. */
         for (step = 0; step < Total_Step; step++) {
             for (int_T = 0; int_T < num_temp; int_T++) {
                 X.Bind.Def.int_T = int_T;
                 X.Bind.Phys.T = Ini_T + Delta_T * (double)int_T;
                 MC(&dsfmt, &(X.Bind));
             }
+            if (use_exmc) {
+                n_ex_accept = exchange_sweep_local(&dsfmt, &(X.Bind));
+                total_ex_accept += n_ex_accept;
+                total_ex_attempt += (num_temp > 1) ? (num_temp - 1) : 0;
+            }
+
             for (int_T = 0; int_T < num_temp; int_T++) {
                 double e_total = X.Bind.Phys.Energy[int_T];
                 W.sample_E[int_T] += e_total / (double)All_N;
                 W.sample_E2[int_T] += e_total * e_total;
                 W.sample_M2[int_T] += magnetization_sq(&(X.Bind), int_T);
             }
+            for (k = 0; k < num_temp; k++)
+                W.sample_overlap[k] += overlap_with_initial(&(X.Bind), &W, k);
         }
 
         /*
@@ -212,6 +256,8 @@ int main(int argc, char **argv) {
             W.accum_M2[int_T] += m2_avg;
             W.accum_A[int_T] += a_avg;
         }
+        for (k = 0; k < num_temp; k++)
+            W.accum_overlap[k] += W.sample_overlap[k] / (double)Total_Step;
         printf("sample %d/%d done (seed=%lu)\n", int_samp + 1, Sample, seed);
     }
 
@@ -221,6 +267,16 @@ int main(int argc, char **argv) {
     } else {
         fprintf(stderr,
                 "Warning: cannot open MC_simple_result.dat for write\n");
+    }
+
+    if (total_ex_attempt > 0) {
+        printf("exchange_acceptance = %.6f (%d / %d)\n",
+               (double)total_ex_accept / (double)total_ex_attempt,
+               total_ex_accept, total_ex_attempt);
+        if (fp != NULL)
+            fprintf(fp, "# exchange_acceptance = %.6f (%d / %d)\n",
+                    (double)total_ex_accept / (double)total_ex_attempt,
+                    total_ex_accept, total_ex_attempt);
     }
 
     printf("\n# T  E_per_site  C_per_site  M2  acceptance\n");
@@ -240,10 +296,26 @@ int main(int argc, char **argv) {
     if (fp != NULL)
         fclose(fp);
 
+    /* Write overlap with initial (step 0) at same temperature: T, overlap. */
+    {
+        FILE *fp_ov = fopen("overlap.dat", "w");
+        if (fp_ov != NULL) {
+            fprintf(fp_ov, "# use_exmc = %d\n", use_exmc);
+            fprintf(fp_ov, "# Overlap = (1/N) sum_i s_i(step=0) . s_i(step=t), same T\n");
+            fprintf(fp_ov, "# int_T   T   overlap\n");
+            for (k = 0; k < num_temp; k++) {
+                double T = Ini_T + Delta_T * (double)k;
+                double ov = W.accum_overlap[k] / (double)Sample;
+                fprintf(fp_ov, "%d  %.6f  %.10f\n", k, T, ov);
+            }
+            fclose(fp_ov);
+        }
+    }
+
     rc = 0;
 
 cleanup:
-    free_work_arrays(&W);
+    free_work_arrays(num_temp, All_N, &W);
     free_minimal_mc_arrays(&X);
     return rc;
 }

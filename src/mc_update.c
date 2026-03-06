@@ -116,3 +116,79 @@ void MC(dsfmt_t *dsfmt, struct BindStruct *X) {
         }
     }
 }
+
+/*
+ * EXMC: try to exchange replicas at temperature slots i and j (adjacent).
+ * Acceptance: P = min(1, exp((1/T_i - 1/T_j) * (E_i - E_j))).
+ * On accept: swap sx,sy,sz and env_sx,env_sy,env_sz (by pointer swap) and Energy.
+ * ratio_1 is not swapped (it counts Metropolis acceptance per slot).
+ * Returns 1 if accepted, 0 otherwise.
+ */
+int exchange_try_pair(dsfmt_t *dsfmt, struct BindStruct *X, int i, int j) {
+    double T_i, T_j;
+    double E_i, E_j;
+    double prob, u;
+    double *tmp_ptr;
+
+    T_i = X->Def.Ini_T + X->Def.Delta_T * (double)i;
+    T_j = X->Def.Ini_T + X->Def.Delta_T * (double)j;
+    E_i = X->Phys.Energy[i];
+    E_j = X->Phys.Energy[j];
+
+    if (T_i <= 0.0 || T_j <= 0.0)
+        return 0;
+
+    prob = exp((1.0 / T_i - 1.0 / T_j) * (E_i - E_j));
+    if (prob > 1.0)
+        prob = 1.0;
+    u = dsfmt_genrand_close_open(dsfmt);
+    if (u >= prob)
+        return 0;
+
+    /* Swap spin arrays (pointer swap, O(1)). */
+    tmp_ptr = X->Def.sx[i];
+    X->Def.sx[i] = X->Def.sx[j];
+    X->Def.sx[j] = tmp_ptr;
+    tmp_ptr = X->Def.sy[i];
+    X->Def.sy[i] = X->Def.sy[j];
+    X->Def.sy[j] = tmp_ptr;
+    tmp_ptr = X->Def.sz[i];
+    X->Def.sz[i] = X->Def.sz[j];
+    X->Def.sz[j] = tmp_ptr;
+    /* Swap env arrays. */
+    tmp_ptr = X->Def.env_sx[i];
+    X->Def.env_sx[i] = X->Def.env_sx[j];
+    X->Def.env_sx[j] = tmp_ptr;
+    tmp_ptr = X->Def.env_sy[i];
+    X->Def.env_sy[i] = X->Def.env_sy[j];
+    X->Def.env_sy[j] = tmp_ptr;
+    tmp_ptr = X->Def.env_sz[i];
+    X->Def.env_sz[i] = X->Def.env_sz[j];
+    X->Def.env_sz[j] = tmp_ptr;
+    /* Swap energies. */
+    {
+        double tmp_E = X->Phys.Energy[i];
+        X->Phys.Energy[i] = X->Phys.Energy[j];
+        X->Phys.Energy[j] = tmp_E;
+    }
+    return 1;
+}
+
+/*
+ * EXMC: one sweep of adjacent-pair exchanges (odd-even to match future MPI).
+ * Pairs (0,1), (2,3), ... then (1,2), (3,4), ...
+ * Returns total number of accepted exchanges.
+ */
+int exchange_sweep_local(dsfmt_t *dsfmt, struct BindStruct *X) {
+    int num_temp = X->Def.num_temp;
+    int i, n_accept = 0;
+
+    /* First pass: pairs (0,1), (2,3), (4,5), ... */
+    for (i = 0; i < num_temp - 1; i += 2)
+        n_accept += exchange_try_pair(dsfmt, X, i, i + 1);
+    /* Second pass: pairs (1,2), (3,4), ... */
+    for (i = 1; i < num_temp - 1; i += 2)
+        n_accept += exchange_try_pair(dsfmt, X, i, i + 1);
+
+    return n_accept;
+}

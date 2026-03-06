@@ -134,10 +134,10 @@ void free_minimal_mc_arrays(struct MCMainCalStruct *X) {
 
 /*
  * Allocate temporary/accumulation arrays for outputs:
- * E, E^2, specific heat, M^2, and acceptance during step/sample averaging.
+ * E, E^2, specific heat, M^2, acceptance, and overlap (with step-0 config).
  */
-int allocate_work_arrays(int num_temp, struct SimpleWorkArrays *W) {
-    if (num_temp <= 0 || W == NULL)
+int allocate_work_arrays(int num_temp, int All_N, struct SimpleWorkArrays *W) {
+    if (num_temp <= 0 || All_N <= 0 || W == NULL)
         return -1;
 
     W->accum_E = (double *)calloc((size_t)num_temp, sizeof(double));
@@ -148,10 +148,18 @@ int allocate_work_arrays(int num_temp, struct SimpleWorkArrays *W) {
     W->sample_E2 = (double *)calloc((size_t)num_temp, sizeof(double));
     W->sample_M2 = (double *)calloc((size_t)num_temp, sizeof(double));
 
+    W->accum_overlap = (double *)calloc((size_t)num_temp, sizeof(double));
+    W->sample_overlap = (double *)calloc((size_t)num_temp, sizeof(double));
+    W->sx0 = alloc_double_2d(num_temp, All_N);
+    W->sy0 = alloc_double_2d(num_temp, All_N);
+    W->sz0 = alloc_double_2d(num_temp, All_N);
+
     if (W->accum_E == NULL || W->accum_C == NULL || W->accum_M2 == NULL ||
         W->accum_A == NULL || W->sample_E == NULL || W->sample_E2 == NULL ||
-        W->sample_M2 == NULL) {
-        free_work_arrays(W);
+        W->sample_M2 == NULL || W->accum_overlap == NULL ||
+        W->sample_overlap == NULL || W->sx0 == NULL || W->sy0 == NULL ||
+        W->sz0 == NULL) {
+        free_work_arrays(num_temp, All_N, W);
         return -1;
     }
 
@@ -159,7 +167,8 @@ int allocate_work_arrays(int num_temp, struct SimpleWorkArrays *W) {
 }
 
 /* Free arrays allocated by allocate_work_arrays(). */
-void free_work_arrays(struct SimpleWorkArrays *W) {
+void free_work_arrays(int num_temp, int All_N, struct SimpleWorkArrays *W) {
+    (void)All_N;
     if (W == NULL)
         return;
     free(W->accum_E);
@@ -169,4 +178,9 @@ void free_work_arrays(struct SimpleWorkArrays *W) {
     free(W->sample_E);
     free(W->sample_E2);
     free(W->sample_M2);
+    free(W->accum_overlap);
+    free(W->sample_overlap);
+    free_double_2d(W->sx0, num_temp);
+    free_double_2d(W->sy0, num_temp);
+    free_double_2d(W->sz0, num_temp);
 }
