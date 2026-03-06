@@ -180,7 +180,11 @@ int main(int argc, char **argv) {
         dsfmt_init_gen_rand(&dsfmt, seed);
 
         /* Initialize spins and neighbor-based effective fields. */
-        initial(&dsfmt, &(X.Bind));
+        if (initial(&dsfmt, &(X.Bind), interaction_file) != 0) {
+            fprintf(stderr, "Error: failed to initialize lattice/spins from '%s'\n",
+                    interaction_file);
+            goto cleanup;
+        }
 
         memset(X.Bind.Phys.ratio_1, 0, (size_t)num_temp * sizeof(int));
 

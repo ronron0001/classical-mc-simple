@@ -258,7 +258,7 @@ void initial_ner(dsfmt_t *dsfmt, struct BindStruct *X) {
     X->Phys.Energy[0] = X->Phys.Energy[0] * 0.5;
 }
 
-void initial(dsfmt_t *dsfmt, struct BindStruct *X) {
+int initial(dsfmt_t *dsfmt, struct BindStruct *X, const char *interaction_file) {
     int all_i, all_j, n_i;
     int int_T;
     int All_N, ni_max, spin_dim;
@@ -273,11 +273,14 @@ void initial(dsfmt_t *dsfmt, struct BindStruct *X) {
     lambda = X->Def.lambda;
     spin_dim = X->Def.spin_dim;
 
-    /*
-     * Build neighbor list once. In this stage1 code path, interaction file
-     * name is fixed to "interaction.def" in the run directory.
-     */
-    build_lattice("interaction.def", X);
+    /* Build neighbor list from the interaction file selected by CLI/default. */
+    if (interaction_file == NULL) {
+        fprintf(stderr, "Error: interaction file path is NULL\n");
+        return -1;
+    }
+    if (build_lattice(interaction_file, X) != 0) {
+        return -1;
+    }
 
     /*
      * Initialize each temperature replica independently with random spins.
@@ -358,4 +361,6 @@ void initial(dsfmt_t *dsfmt, struct BindStruct *X) {
         }
         X->Phys.Energy[int_T] = (X->Phys.Energy[int_T]) * 0.5;
     }
+
+    return 0;
 }
