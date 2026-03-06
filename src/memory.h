@@ -11,6 +11,11 @@ struct SimpleWorkArrays {
     double *sample_E;  /* Sum over MC steps within one sample, using E/N */
     double *sample_E2; /* Sum over MC steps within one sample, using E^2 */
     double *sample_M2; /* Sum over MC steps within one sample */
+    /* Exchange MC: per-pair (i,i+1) counts, length num_temp-1 */
+    int *exchange_accept; /* current sample */
+    int *exchange_attempt;
+    int *accum_exchange_accept; /* sum over samples */
+    int *accum_exchange_attempt;
 };
 
 int allocate_minimal_mc_arrays(struct MCMainCalStruct *X);

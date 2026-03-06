@@ -39,7 +39,7 @@ static int is_comment_or_blank(const char *line) {
  * Reads a parameter file with "key = value" format.
  * Sets: Def->Burn_in, Def->Total_Step, Def->Sample,
  *       Def->num_temp, Def->Ini_T, Def->Delta_T,
- *       Def->lambda, Def->H
+ *       Def->lambda, Def->H, Def->exchange_interval
  *
  * Returns 0 on success, -1 on error.
  *-------------------------------------------------------------*/
@@ -53,6 +53,7 @@ int read_param(const char *filename, struct DefineList *Def) {
     Def->spin_dim = 3;    /* Heisenberg */
     Def->output_spin = 0; /* skip spin output by default */
     Def->init_state = 0;  /* RANDOM */
+    Def->exchange_interval = 1; /* enable exchange every step by default */
 
     fp = fopen(filename, "r");
     if (fp == NULL) {
@@ -84,6 +85,8 @@ int read_param(const char *filename, struct DefineList *Def) {
             Def->lambda = atof(val);
         } else if (strcmp(key, "H") == 0) {
             Def->H = atof(val);
+        } else if (strcmp(key, "exchange_interval") == 0) {
+            Def->exchange_interval = atoi(val);
         } else if (strcmp(key, "spin_dim") == 0) {
             Def->spin_dim = atoi(val);
         } else if (strcmp(key, "output_spin") == 0) {
@@ -101,6 +104,7 @@ int read_param(const char *filename, struct DefineList *Def) {
     if (Def->myrank == MASTER) {
         printf("read_param: Burn_in=%d Total_Step=%d Sample=%d num_temp=%d\n",
                Def->Burn_in, Def->Total_Step, Def->Sample, Def->num_temp);
+        printf("read_param: exchange_interval=%d\n", Def->exchange_interval);
         printf(
             "read_param: Ini_T=%lf Delta_T=%lf lambda=%lf H=%lf spin_dim=%d\n",
             Def->Ini_T, Def->Delta_T, Def->lambda, Def->H, Def->spin_dim);

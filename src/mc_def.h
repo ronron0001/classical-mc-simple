@@ -26,6 +26,7 @@ struct DefineList {
 
     /* Simulation parameters */
     int Burn_in, Total_Step, Sample, num_temp;
+    int exchange_interval; /* try exchange every N steps (default 1) */
     double Ini_T, Delta_T;
 
     /* Hamiltonian parameters */
@@ -220,9 +221,13 @@ int read_interaction(const char *filename, struct DefineList *Def);
 
 /* lattice.c */
 int build_lattice(const char *filename, struct BindStruct *X);
-void initial(dsfmt_t *dsfmt, struct BindStruct *X);
+int initial(dsfmt_t *dsfmt, struct BindStruct *X, const char *interaction_file);
 
 /* mc_update.c */
 void MC(dsfmt_t *dsfmt, struct BindStruct *X);
+
+/* exmc.c */
+void exchange_step(dsfmt_t *dsfmt, struct BindStruct *X, int *exchange_accept,
+                   int *exchange_attempt);
 
 #endif /* MC_DEF_H */

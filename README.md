@@ -90,6 +90,7 @@ H          = 0.0
 spin_dim   = 2
 output_spin = 0
 init_state  = 0
+exchange_interval = 1
 ```
 
 Supported keys:
@@ -103,6 +104,10 @@ Supported keys:
 - `lambda` (double): z-anisotropy factor in interaction term
 - `H` (double): field coupled to `S_z`
 - `spin_dim` (int): `1` (Ising), `2` (XY), `3` (Heisenberg)
+- `exchange_interval` (int, optional): replica exchange attempt interval
+  - `0`: disabled
+  - `1`: every MC sweep (default)
+  - `N`: every N sweeps
 - `output_spin` (int, optional): `0` off, `1` on
 - `init_state` (int, optional): initial spin mode
   - `0`: random
@@ -183,6 +188,7 @@ Main source files are in `src/`:
 - `input_parser.c`: parsing of `param.def`, `lattice.def`, `interaction.def`
 - `lattice.c`: neighbor table construction, spin initialization, initial fields/energy
 - `mc_update.c`: one Metropolis sweep per temperature slot
+- `exmc.c`: replica exchange (Exchange MC) between adjacent temperatures
 - `mc_def.h`: shared structs/prototypes
 - `dSFMT.c`, `dSFMT.h`, `dSFMT-params.h`, `dSFMT-params19937.h`: random number generator
 - `CMakeLists.txt`: build config
@@ -190,7 +196,7 @@ Main source files are in `src/`:
 ## Notes
 
 - Single-process only (no MPI)
-- Replica exchange and over-relaxation are intentionally omitted
+- Replica exchange (Exchange MC / parallel tempering) is supported via `exchange_interval`
 - dSFMT parameter is fixed to `MEXP=19937` in this minimal version
 
 ## License
