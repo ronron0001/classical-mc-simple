@@ -1,3 +1,16 @@
 .DS_Store
 .cache/
 src/build/
+
+# tests/efficiency: execution outputs and artifacts
+tests/efficiency/*.dat
+tests/efficiency/*.log
+tests/efficiency/*.png
+tests/efficiency/*_summary.txt
+tests/efficiency/efficiency_comparison.txt
+tests/efficiency/overlap_comparison_summary.txt
+tests/efficiency/__pycache__/
+tests/efficiency/exchange_results/
+tests/efficiency/normal_results/
+tests/efficiency/overlap_exchange_results/
+tests/efficiency/overlap_normal_results/
