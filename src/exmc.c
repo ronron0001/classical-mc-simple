@@ -3,6 +3,7 @@
 static void swap_state(struct BindStruct *X, int i, int j) {
     double *tmp_d;
     double tmp;
+    int tmp_i;
 
     tmp_d = X->Def.sx[i];
     X->Def.sx[i] = X->Def.sx[j];
@@ -31,21 +32,28 @@ static void swap_state(struct BindStruct *X, int i, int j) {
     tmp = X->Phys.Energy[i];
     X->Phys.Energy[i] = X->Phys.Energy[j];
     X->Phys.Energy[j] = tmp;
+
+    tmp_i = X->Phys.ratio_1[i];
+    X->Phys.ratio_1[i] = X->Phys.ratio_1[j];
+    X->Phys.ratio_1[j] = tmp_i;
 }
 
+/*
+ * yyoshiyy-algorithm: try ALL adjacent pairs (0,1), (1,2), ..., (num_temp-2, num_temp-1)
+ * in sequence. Same as yyoshiyy/classical-mc-simple attempt_exchange loop.
+ */
 void exchange_step(dsfmt_t *dsfmt, struct BindStruct *X, int *exchange_accept,
                    int *exchange_attempt) {
     int num_temp = X->Def.num_temp;
     double Ini_T = X->Def.Ini_T;
     double Delta_T = X->Def.Delta_T;
-    int parity, i;
+    int i;
 
     if (num_temp < 2) {
         return;
     }
 
-    parity = (int)(dsfmt_genrand_close_open(dsfmt) * 2.0);
-    for (i = parity; i < num_temp - 1; i += 2) {
+    for (i = 0; i < num_temp - 1; i++) {
         double Ti = Ini_T + Delta_T * (double)i;
         double Tj = Ini_T + Delta_T * (double)(i + 1);
         double beta_i = 1.0 / Ti;

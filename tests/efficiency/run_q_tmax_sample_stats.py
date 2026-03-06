@@ -1,21 +1,12 @@
 #!/usr/bin/env python3
 """
-Compute q(t_max) vs T using variance across internal Sample bins directly.
+Plot <overlap> vs T from MC_simple_result.dat (yyoshiyy 互換).
 
-Flow:
-  1) Read one base param file: samples/square_L16_Ising/param.def.
-  2) Create temporary params by changing only exchange_interval:
-       - Normal: exchange_interval=0
-       - Exchange: exchange_interval=1
-  3) Run each method once.
-  3) Read MC_simple_q_tmax_samples.dat from each run.
-  4) Estimate mean and stderr over Sample bins.
-  5) Output q_tmax_vs_T.png and q_tmax_vs_T_summary.txt.
+<overlap> = 時間平均 (1/N) S(t)·S(0). エラーバーは n_runs 回実行の標準誤差.
 """
 
 import math
 import os
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -31,13 +22,11 @@ PARAM_BASE = SAMPLE_DIR / "param.def"
 LATTICE = SAMPLE_DIR / "lattice.def"
 INTERACTION = SAMPLE_DIR / "interaction.def"
 
-NORMAL_FILE = SCRIPT_DIR / "q_tmax_samples_normal.dat"
-EXCHANGE_FILE = SCRIPT_DIR / "q_tmax_samples_exchange.dat"
 FIG_FILE = SCRIPT_DIR / "q_tmax_vs_T.png"
 TXT_FILE = SCRIPT_DIR / "q_tmax_vs_T_summary.txt"
 
-SEED_NORMAL = int(os.environ.get("SEED_NORMAL", "500000"))
-SEED_EXCHANGE = int(os.environ.get("SEED_EXCHANGE", "600000"))
+N_RUNS = int(os.environ.get("N_RUNS", "20"))
+BASE_SEED = int(os.environ.get("BASE_SEED", "10000"))
 
 
 def make_temp_param(base_param, out_param, exchange_interval):
@@ -60,53 +49,42 @@ def make_temp_param(base_param, out_param, exchange_interval):
     out_param.write_text("\n".join(out_lines) + "\n")
 
 
-def run_once(label, param_file, seed, out_file):
-    env = os.environ.copy()
-    env["MC_SIMPLE_SEED"] = str(seed)
-    log_path = SCRIPT_DIR / f"{label}_q_tmax.log"
-    cmd = [str(MC_BIN), str(param_file), str(LATTICE), str(INTERACTION)]
-    with open(log_path, "w") as logf:
-        proc = subprocess.run(
-            cmd,
-            cwd=SCRIPT_DIR,
-            env=env,
-            stdout=logf,
-            stderr=subprocess.STDOUT,
-        )
-    if proc.returncode != 0:
-        raise RuntimeError(f"{label} run failed. See {log_path}")
-
-    src = SCRIPT_DIR / "MC_simple_q_tmax_samples.dat"
-    if not src.exists():
-        raise RuntimeError(f"{label}: MC_simple_q_tmax_samples.dat not found")
-    shutil.copy2(src, out_file)
-
-
-def parse_sample_q_file(path):
-    temps = None
-    rows = []
+def parse_result_dat(path):
+    """Extract T and overlap from MC_simple_result.dat."""
+    temps, overlaps = [], []
     for raw in path.read_text().splitlines():
         line = raw.strip()
-        if not line:
-            continue
-        if line.startswith("#"):
-            if line.startswith("# sample"):
-                tokens = line.split()[2:]
-                temps = [float(tok.replace("q_T", "")) for tok in tokens]
+        if not line or line.startswith("#"):
             continue
         parts = line.split()
-        rows.append([float(x) for x in parts[1:]])
-    if temps is None:
-        raise RuntimeError(f"failed to parse header in {path}")
-    if not rows:
-        raise RuntimeError(f"no sample rows in {path}")
-    for r in rows:
-        if len(r) != len(temps):
-            raise RuntimeError(f"column mismatch in {path}")
-    return temps, rows
+        if len(parts) >= 6:
+            temps.append(float(parts[0]))
+            overlaps.append(float(parts[5]))
+    return temps, overlaps
 
 
-def mean_and_stderr(vals):
+def run_and_collect(label, param_file, n_runs, seed_offset):
+    all_temps, all_overlaps = [], []
+    for run in range(n_runs):
+        seed = BASE_SEED + seed_offset + run * 1007
+        env = os.environ.copy()
+        env["MC_SIMPLE_SEED"] = str(seed)
+        proc = subprocess.run(
+            [str(MC_BIN), str(param_file), str(LATTICE), str(INTERACTION)],
+            cwd=SCRIPT_DIR,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(f"{label} run {run} failed: {proc.stderr}")
+        t, ov = parse_result_dat(SCRIPT_DIR / "MC_simple_result.dat")
+        all_temps.append(t)
+        all_overlaps.append(ov)
+    return all_temps, all_overlaps
+
+
+def mean_stderr(vals):
     n = len(vals)
     if n == 0:
         return 0.0, 0.0
@@ -117,26 +95,13 @@ def mean_and_stderr(vals):
     return m, math.sqrt(var / float(n))
 
 
-def summarize(rows):
-    n_sample = len(rows)
-    n_temp = len(rows[0])
-    means = []
-    ses = []
-    for t_idx in range(n_temp):
-        vals = [rows[s][t_idx] for s in range(n_sample)]
-        m, se = mean_and_stderr(vals)
-        means.append(m)
-        ses.append(se)
-    return means, ses, n_sample
-
-
 def main():
     if not MC_BIN.exists():
         print("Error: MC_simple not found. Build first.")
         return 1
     for fp in (PARAM_BASE, LATTICE, INTERACTION):
         if not fp.exists():
-            print(f"Error: missing file {fp}")
+            print(f"Error: missing {fp}")
             return 1
 
     tmp_normal = SCRIPT_DIR / "_tmp_param_normal.def"
@@ -145,61 +110,54 @@ def main():
     make_temp_param(PARAM_BASE, tmp_exchange, exchange_interval=1)
 
     try:
-        run_once("normal", tmp_normal, SEED_NORMAL, NORMAL_FILE)
-        run_once("exchange", tmp_exchange, SEED_EXCHANGE, EXCHANGE_FILE)
+        print(f"Running Normal MC {N_RUNS} times...")
+        t_n, ov_n = run_and_collect("normal", tmp_normal, N_RUNS, 0)
+        print(f"Running Exchange MC {N_RUNS} times...")
+        t_e, ov_e = run_and_collect("exchange", tmp_exchange, N_RUNS, 100000)
     finally:
-        if tmp_normal.exists():
-            tmp_normal.unlink()
-        if tmp_exchange.exists():
-            tmp_exchange.unlink()
+        for p in (tmp_normal, tmp_exchange):
+            if p.exists():
+                p.unlink()
 
-    t_n, rows_n = parse_sample_q_file(NORMAL_FILE)
-    t_e, rows_e = parse_sample_q_file(EXCHANGE_FILE)
-    if t_n != t_e:
-        print("Error: temperature grids differ between normal and exchange")
+    temps = t_n[0]
+    if t_e[0] != temps:
+        print("Error: temperature grids differ")
         return 1
-    temps = t_n
 
-    mean_n, se_n, n_n = summarize(rows_n)
-    mean_e, se_e, n_e = summarize(rows_e)
+    mean_n = [mean_stderr([ov_n[r][i] for r in range(N_RUNS)])[0]
+              for i in range(len(temps))]
+    se_n = [mean_stderr([ov_n[r][i] for r in range(N_RUNS)])[1]
+            for i in range(len(temps))]
+    mean_e = [mean_stderr([ov_e[r][i] for r in range(N_RUNS)])[0]
+              for i in range(len(temps))]
+    se_e = [mean_stderr([ov_e[r][i] for r in range(N_RUNS)])[1]
+            for i in range(len(temps))]
 
     plt.figure(figsize=(7.0, 4.6))
     plt.errorbar(
-        temps,
-        mean_n,
-        yerr=se_n,
-        fmt="o-",
-        capsize=3,
-        color="#1f77b4",
-        label=f"Normal (Sample bins: n={n_n})",
+        temps, mean_n, yerr=se_n, fmt="o-", capsize=3, color="#1f77b4",
+        label=f"Normal (n_runs={N_RUNS})",
     )
     plt.errorbar(
-        temps,
-        mean_e,
-        yerr=se_e,
-        fmt="s-",
-        capsize=3,
-        color="#d62728",
-        label=f"Exchange (Sample bins: n={n_e})",
+        temps, mean_e, yerr=se_e, fmt="s-", capsize=3, color="#d62728",
+        label=f"Exchange (n_runs={N_RUNS})",
     )
     plt.axhline(0.0, color="black", linestyle="--", linewidth=1.0, alpha=0.7)
     plt.xlabel("Temperature T")
-    plt.ylabel("q(t_max)")
-    plt.title("q(t_max) vs T (stderr from Sample-bin variance)")
+    plt.ylabel("<overlap>")
+    plt.title("<overlap> vs T (stderr from n_runs)")
     plt.grid(alpha=0.3)
     plt.legend()
     plt.tight_layout()
     plt.savefig(FIG_FILE, dpi=170)
     plt.close()
 
-    lines = []
-    lines.append("q(t=t_max) vs T comparison")
-    lines.append("stderr estimated from per-Sample variance (within one run)")
-    lines.append(f"base_param={PARAM_BASE}")
-    lines.append(f"n_normal={n_n}, n_exchange={n_e}")
-    lines.append(
-        "Columns: T, q_normal_mean, q_normal_stderr, q_exchange_mean, q_exchange_stderr"
-    )
+    lines = [
+        "<overlap> vs T (time-averaged S(t)·S(0))",
+        f"n_runs={N_RUNS}",
+        f"base_param={PARAM_BASE}",
+        "T  overlap_normal_mean  overlap_normal_stderr  overlap_exchange_mean  overlap_exchange_stderr",
+    ]
     for i, T in enumerate(temps):
         lines.append(
             f"{T:.6f}\t{mean_n[i]:.10f}\t{se_n[i]:.10f}\t{mean_e[i]:.10f}\t{se_e[i]:.10f}"
@@ -208,7 +166,6 @@ def main():
 
     print(f"Wrote {FIG_FILE}")
     print(f"Wrote {TXT_FILE}")
-    print(f"Saved raw sample bins: {NORMAL_FILE}, {EXCHANGE_FILE}")
     return 0
 
 

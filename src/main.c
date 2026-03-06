@@ -129,7 +129,6 @@ int main(int argc, char **argv) {
     double Ini_T, Delta_T;
     double **ref_sx, **ref_sy, **ref_sz;
     double *accum_overlap;
-    double *sample_q_tmax;
     double *sample_overlap;
     double *sample_bin_E, *sample_bin_C, *sample_bin_M2, *sample_bin_A;
     int rc;
@@ -140,7 +139,6 @@ int main(int argc, char **argv) {
     ref_sy = NULL;
     ref_sz = NULL;
     accum_overlap = NULL;
-    sample_q_tmax = NULL;
     sample_overlap = NULL;
     sample_bin_E = NULL;
     sample_bin_C = NULL;
@@ -207,8 +205,6 @@ int main(int argc, char **argv) {
     ref_sz = alloc_double_2d_local(num_temp, All_N);
     accum_overlap =
         (double *)calloc((size_t)num_temp * (size_t)(Total_Step + 1), sizeof(double));
-    sample_q_tmax =
-        (double *)calloc((size_t)Sample * (size_t)num_temp, sizeof(double));
     sample_overlap = (double *)calloc((size_t)Sample * (size_t)num_temp *
                                           (size_t)(Total_Step + 1),
                                       sizeof(double));
@@ -217,7 +213,7 @@ int main(int argc, char **argv) {
     sample_bin_M2 = (double *)calloc((size_t)Sample * (size_t)num_temp, sizeof(double));
     sample_bin_A = (double *)calloc((size_t)Sample * (size_t)num_temp, sizeof(double));
     if (ref_sx == NULL || ref_sy == NULL || ref_sz == NULL ||
-        accum_overlap == NULL || sample_q_tmax == NULL || sample_overlap == NULL ||
+        accum_overlap == NULL || sample_overlap == NULL ||
         sample_bin_E == NULL || sample_bin_C == NULL || sample_bin_M2 == NULL ||
         sample_bin_A == NULL) {
         fprintf(stderr, "Error: memory allocation failed\n");
@@ -335,11 +331,6 @@ int main(int argc, char **argv) {
             sample_bin_C[(size_t)int_samp * (size_t)num_temp + (size_t)int_T] = c_avg;
             sample_bin_M2[(size_t)int_samp * (size_t)num_temp + (size_t)int_T] = m2_avg;
             sample_bin_A[(size_t)int_samp * (size_t)num_temp + (size_t)int_T] = a_avg;
-            sample_q_tmax[(size_t)int_samp * (size_t)num_temp + (size_t)int_T] =
-                sample_overlap[(size_t)int_samp * (size_t)num_temp *
-                                   (size_t)(Total_Step + 1) +
-                               (size_t)int_T * (size_t)(Total_Step + 1) +
-                               (size_t)Total_Step];
         }
 
         for (int_T = 0; int_T < num_pairs; int_T++) {
@@ -352,22 +343,30 @@ int main(int argc, char **argv) {
 
     fp = fopen("MC_simple_result.dat", "w");
     if (fp != NULL) {
-        fprintf(fp, "# T  E_per_site  C_per_site  M2  acceptance\n");
+        fprintf(fp, "# T  E_per_site  C_per_site  M2  acceptance  overlap\n");
     } else {
         fprintf(stderr,
                 "Warning: cannot open MC_simple_result.dat for write\n");
     }
 
-    printf("\n# T  E_per_site  C_per_site  M2  acceptance\n");
+    printf("\n# T  E_per_site  C_per_site  M2  acceptance  overlap\n");
     for (int_T = 0; int_T < num_temp; int_T++) {
         double T = Ini_T + Delta_T * (double)int_T;
         double E = W.accum_E[int_T] / (double)Sample;
         double C = W.accum_C[int_T] / (double)Sample;
         double M2 = W.accum_M2[int_T] / (double)Sample;
         double A = W.accum_A[int_T] / (double)Sample;
-        printf("%.8f  %.10f  %.10f  %.10f  %.10f\n", T, E, C, M2, A);
+        /* overlap = <q(t)>_t = time-averaged (1/N) S(t)·S(0) over measurement phase */
+        double overlap_sum = 0.0;
+        for (step = 1; step <= Total_Step; step++) {
+            overlap_sum += accum_overlap[(size_t)int_T * (size_t)(Total_Step + 1) +
+                                         (size_t)step];
+        }
+        double Ov = overlap_sum / ((double)Sample * (double)Total_Step);
+        printf("%.8f  %.10f  %.10f  %.10f  %.10f  %.10f\n", T, E, C, M2, A, Ov);
         if (fp != NULL) {
-            fprintf(fp, "%.8f  %.10f  %.10f  %.10f  %.10f\n", T, E, C, M2, A);
+            fprintf(fp, "%.8f  %.10f  %.10f  %.10f  %.10f  %.10f\n",
+                    T, E, C, M2, A, Ov);
         }
     }
 
@@ -423,29 +422,6 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Warning: cannot open MC_simple_overlap.dat for write\n");
     }
 
-    fp_overlap = fopen("MC_simple_q_tmax_samples.dat", "w");
-    if (fp_overlap != NULL) {
-        fprintf(fp_overlap, "# sample");
-        for (int_T = 0; int_T < num_temp; int_T++) {
-            double T = Ini_T + Delta_T * (double)int_T;
-            fprintf(fp_overlap, "  q_T%.6f", T);
-        }
-        fprintf(fp_overlap, "\n");
-        for (int_samp = 0; int_samp < Sample; int_samp++) {
-            fprintf(fp_overlap, "%d", int_samp);
-            for (int_T = 0; int_T < num_temp; int_T++) {
-                double q =
-                    sample_q_tmax[(size_t)int_samp * (size_t)num_temp + (size_t)int_T];
-                fprintf(fp_overlap, "  %.10f", q);
-            }
-            fprintf(fp_overlap, "\n");
-        }
-        fclose(fp_overlap);
-    } else {
-        fprintf(stderr,
-                "Warning: cannot open MC_simple_q_tmax_samples.dat for write\n");
-    }
-
     fp_overlap = fopen("MC_simple_overlap_samples.dat", "w");
     if (fp_overlap != NULL) {
         fprintf(fp_overlap, "# sample  step");
@@ -498,7 +474,6 @@ cleanup:
     free(sample_bin_M2);
     free(sample_bin_A);
     free(sample_overlap);
-    free(sample_q_tmax);
     free(accum_overlap);
     free_double_2d_local(ref_sx, num_temp);
     free_double_2d_local(ref_sy, num_temp);
