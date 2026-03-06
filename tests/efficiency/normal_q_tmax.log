@@ -1,0 +1,43 @@
+read_param: Burn_in=1000 Total_Step=5000 Sample=20 num_temp=6
+read_param: exchange_interval=0
+read_param: Ini_T=1.000000 Delta_T=0.300000 lambda=1.000000 H=0.000000 spin_dim=1
+read_lattice: L_x=16 L_y=16 L_z=1 orb_num=1 All_N=256
+read_interaction: Read 2 unique bonds, ni_max = 4
+MC_simple with Exchange Monte Carlo (no MPI)
+L=(16,16,1) orb=1 spin_dim=1 All_N=256 ni_max=4
+Burn_in=1000 Total_Step=5000 Sample=20 num_temp=6 exchange_interval=0
+sample 1/20 done (seed=500000)
+sample 2/20 done (seed=508945)
+sample 3/20 done (seed=517890)
+sample 4/20 done (seed=526835)
+sample 5/20 done (seed=535780)
+sample 6/20 done (seed=544725)
+sample 7/20 done (seed=553670)
+sample 8/20 done (seed=562615)
+sample 9/20 done (seed=571560)
+sample 10/20 done (seed=580505)
+sample 11/20 done (seed=589450)
+sample 12/20 done (seed=598395)
+sample 13/20 done (seed=607340)
+sample 14/20 done (seed=616285)
+sample 15/20 done (seed=625230)
+sample 16/20 done (seed=634175)
+sample 17/20 done (seed=643120)
+sample 18/20 done (seed=652065)
+sample 19/20 done (seed=661010)
+sample 20/20 done (seed=669955)
+
+# T  E_per_site  C_per_site  M2  acceptance
+1.00000000  -1.9971629688  0.0234076191  0.9985617816  0.0007223047
+1.30000000  -1.9801771875  0.1015358941  0.9895653381  0.0052414062
+1.60000000  -1.9283028125  0.2631655120  0.9599401532  0.0200587500
+1.90000000  -1.8098315625  0.5636734677  0.8821634204  0.0573808594
+2.20000000  -1.5486221875  1.3150187647  0.6494638306  0.1495759375
+2.50000000  -1.1304325000  1.0495644669  0.2007730988  0.3137518359
+
+# Exchange acceptance per pair (T_i, T_{i+1}):
+# pair (0,1): T=1.0000-1.3000  accept=0/0  rate=0.0000
+# pair (1,2): T=1.3000-1.6000  accept=0/0  rate=0.0000
+# pair (2,3): T=1.6000-1.9000  accept=0/0  rate=0.0000
+# pair (3,4): T=1.9000-2.2000  accept=0/0  rate=0.0000
+# pair (4,5): T=2.2000-2.5000  accept=0/0  rate=0.0000

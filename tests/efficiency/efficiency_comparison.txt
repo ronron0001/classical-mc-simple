@@ -1,0 +1,109 @@
+================================================================================
+Efficiency Comparison: Normal MC vs Exchange MC
+================================================================================
+
+Metrics: mean +/- standard_error (stderr from Sample-bin variance)
+
+--- T = 1.0000 ---
+  E_per_site:
+    Normal:   -1.997120 +/- 0.000028  (n=20)
+    Exchange: -1.997182 +/- 0.000037  (n=20)
+    Ratio (Exchange/Normal stderr): 1.314
+
+  C_per_site:
+    Normal:   0.023760 +/- 0.000274  (n=20)
+    Exchange: 0.023126 +/- 0.000324  (n=20)
+    Ratio (Exchange/Normal stderr): 1.180
+
+  M2:
+    Normal:   0.998538 +/- 0.000015  (n=20)
+    Exchange: 0.998570 +/- 0.000019  (n=20)
+    Ratio (Exchange/Normal stderr): 1.273
+
+
+--- T = 1.3000 ---
+  E_per_site:
+    Normal:   -1.980250 +/- 0.000109  (n=20)
+    Exchange: -1.980074 +/- 0.000133  (n=20)
+    Ratio (Exchange/Normal stderr): 1.223
+
+  C_per_site:
+    Normal:   0.101208 +/- 0.000807  (n=20)
+    Exchange: 0.101607 +/- 0.000727  (n=20)
+    Ratio (Exchange/Normal stderr): 0.900
+
+  M2:
+    Normal:   0.989616 +/- 0.000062  (n=20)
+    Exchange: 0.989522 +/- 0.000072  (n=20)
+    Ratio (Exchange/Normal stderr): 1.172
+
+
+--- T = 1.6000 ---
+  E_per_site:
+    Normal:   -1.928264 +/- 0.000199  (n=20)
+    Exchange: -1.928109 +/- 0.000200  (n=20)
+    Ratio (Exchange/Normal stderr): 1.005
+
+  C_per_site:
+    Normal:   0.262821 +/- 0.001691  (n=20)
+    Exchange: 0.264321 +/- 0.001272  (n=20)
+    Ratio (Exchange/Normal stderr): 0.752
+
+  M2:
+    Normal:   0.959897 +/- 0.000130  (n=20)
+    Exchange: 0.959860 +/- 0.000128  (n=20)
+    Ratio (Exchange/Normal stderr): 0.983
+
+
+--- T = 1.9000 ---
+  E_per_site:
+    Normal:   -1.809037 +/- 0.000542  (n=20)
+    Exchange: -1.809610 +/- 0.000513  (n=20)
+    Ratio (Exchange/Normal stderr): 0.946
+
+  C_per_site:
+    Normal:   0.564911 +/- 0.003803  (n=20)
+    Exchange: 0.564470 +/- 0.004345  (n=20)
+    Ratio (Exchange/Normal stderr): 1.143
+
+  M2:
+    Normal:   0.881563 +/- 0.000484  (n=20)
+    Exchange: 0.881910 +/- 0.000476  (n=20)
+    Ratio (Exchange/Normal stderr): 0.983
+
+
+--- T = 2.2000 ---
+  E_per_site:
+    Normal:   -1.551685 +/- 0.001748  (n=20)
+    Exchange: -1.550397 +/- 0.001447  (n=20)
+    Ratio (Exchange/Normal stderr): 0.828
+
+  C_per_site:
+    Normal:   1.285815 +/- 0.015357  (n=20)
+    Exchange: 1.280745 +/- 0.011611  (n=20)
+    Ratio (Exchange/Normal stderr): 0.756
+
+  M2:
+    Normal:   0.653966 +/- 0.002559  (n=20)
+    Exchange: 0.652253 +/- 0.002058  (n=20)
+    Ratio (Exchange/Normal stderr): 0.804
+
+
+--- T = 2.5000 ---
+  E_per_site:
+    Normal:   -1.132228 +/- 0.001219  (n=20)
+    Exchange: -1.131740 +/- 0.001696  (n=20)
+    Ratio (Exchange/Normal stderr): 1.391
+
+  C_per_site:
+    Normal:   1.065093 +/- 0.007496  (n=20)
+    Exchange: 1.073336 +/- 0.009543  (n=20)
+    Ratio (Exchange/Normal stderr): 1.273
+
+  M2:
+    Normal:   0.202019 +/- 0.001360  (n=20)
+    Exchange: 0.204567 +/- 0.002653  (n=20)
+    Ratio (Exchange/Normal stderr): 1.951
+
+
+================================================================================

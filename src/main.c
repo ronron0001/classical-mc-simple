@@ -1,10 +1,64 @@
 #include "mc_def.h"
 #include "memory.h"
 
+/* Allocate a[n1][n2], zero-initialized. */
+static double **alloc_double_2d_local(int n1, int n2) {
+    int i;
+    double **a = (double **)malloc((size_t)n1 * sizeof(double *));
+    if (a == NULL)
+        return NULL;
+    for (i = 0; i < n1; i++) {
+        a[i] = (double *)calloc((size_t)n2, sizeof(double));
+        if (a[i] == NULL) {
+            int j;
+            for (j = 0; j < i; j++)
+                free(a[j]);
+            free(a);
+            return NULL;
+        }
+    }
+    return a;
+}
+
+static void free_double_2d_local(double **a, int n1) {
+    int i;
+    if (a == NULL)
+        return;
+    for (i = 0; i < n1; i++)
+        free(a[i]);
+    free(a);
+}
+
+/*
+ * Overlap with reference configuration at one temperature slot:
+ *   q(t) = (1/N) * sum_i S_i(0) · S_i(t)
+ */
+static double spin_overlap(struct BindStruct *X, double **ref_sx, double **ref_sy,
+                           double **ref_sz, int int_T) {
+    int all_i;
+    int All_N = X->Def.All_N;
+    int spin_dim = X->Def.spin_dim;
+    double q = 0.0;
+
+    for (all_i = 0; all_i < All_N; all_i++) {
+        if (spin_dim == 1) {
+            q += ref_sz[int_T][all_i] * X->Def.sz[int_T][all_i];
+        } else if (spin_dim == 2) {
+            q += ref_sx[int_T][all_i] * X->Def.sx[int_T][all_i] +
+                 ref_sy[int_T][all_i] * X->Def.sy[int_T][all_i];
+        } else {
+            q += ref_sx[int_T][all_i] * X->Def.sx[int_T][all_i] +
+                 ref_sy[int_T][all_i] * X->Def.sy[int_T][all_i] +
+                 ref_sz[int_T][all_i] * X->Def.sz[int_T][all_i];
+        }
+    }
+
+    return q / (double)All_N;
+}
+
 /*
  * Return instantaneous M^2 per site:
  *   M^2 = (Mx^2 + My^2 + Mz^2) / N^2
- * This is computed at each MC step, then averaged in time.
  */
 static double magnetization_sq(struct BindStruct *X, int int_T) {
     int all_i, All_N;
@@ -65,17 +119,33 @@ int main(int argc, char **argv) {
     const char *seed_env;
     char *endptr;
     FILE *fp;
+    FILE *fp_overlap;
 
-    int num_temp, All_N, ni_max;
-    int Burn_in, Total_Step, Sample;
+    int num_temp, All_N, ni_max, num_pairs;
+    int Burn_in, Total_Step, Sample, exchange_interval;
     int int_samp, int_T, step;
     unsigned long base_seed;
     unsigned long seed;
     double Ini_T, Delta_T;
+    double **ref_sx, **ref_sy, **ref_sz;
+    double *accum_overlap;
+    double *sample_q_tmax;
+    double *sample_overlap;
+    double *sample_bin_E, *sample_bin_C, *sample_bin_M2, *sample_bin_A;
     int rc;
 
     memset(&X, 0, sizeof(X));
     memset(&W, 0, sizeof(W));
+    ref_sx = NULL;
+    ref_sy = NULL;
+    ref_sz = NULL;
+    accum_overlap = NULL;
+    sample_q_tmax = NULL;
+    sample_overlap = NULL;
+    sample_bin_E = NULL;
+    sample_bin_C = NULL;
+    sample_bin_M2 = NULL;
+    sample_bin_A = NULL;
     rc = 1;
 
     if (parse_input_files(argc, argv, &param_file, &lattice_file,
@@ -90,7 +160,6 @@ int main(int argc, char **argv) {
     X.Bind.Def.myrank = MASTER;
     X.Bind.Def.total_proc = 1;
 
-    /* Read model/simulation settings from input files. */
     if (read_param(param_file, &X.Bind.Def) != 0)
         return 1;
     if (read_lattice(lattice_file, &X.Bind.Def) != 0)
@@ -106,7 +175,13 @@ int main(int argc, char **argv) {
     Sample = X.Bind.Def.Sample;
     Ini_T = X.Bind.Def.Ini_T;
     Delta_T = X.Bind.Def.Delta_T;
+    exchange_interval = X.Bind.Def.exchange_interval;
+    num_pairs = (num_temp > 1) ? (num_temp - 1) : 0;
 
+    if (exchange_interval < 0) {
+        fprintf(stderr, "Error: exchange_interval must be >= 0 (0 = disabled)\n");
+        goto cleanup;
+    }
     if (num_temp <= 0 || All_N <= 0 || ni_max <= 0) {
         fprintf(stderr, "Error: invalid lattice/temperature setting\n");
         goto cleanup;
@@ -122,8 +197,29 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Error: memory allocation failed\n");
         goto cleanup;
     }
-
     if (allocate_work_arrays(num_temp, &W) != 0) {
+        fprintf(stderr, "Error: memory allocation failed\n");
+        goto cleanup;
+    }
+
+    ref_sx = alloc_double_2d_local(num_temp, All_N);
+    ref_sy = alloc_double_2d_local(num_temp, All_N);
+    ref_sz = alloc_double_2d_local(num_temp, All_N);
+    accum_overlap =
+        (double *)calloc((size_t)num_temp * (size_t)(Total_Step + 1), sizeof(double));
+    sample_q_tmax =
+        (double *)calloc((size_t)Sample * (size_t)num_temp, sizeof(double));
+    sample_overlap = (double *)calloc((size_t)Sample * (size_t)num_temp *
+                                          (size_t)(Total_Step + 1),
+                                      sizeof(double));
+    sample_bin_E = (double *)calloc((size_t)Sample * (size_t)num_temp, sizeof(double));
+    sample_bin_C = (double *)calloc((size_t)Sample * (size_t)num_temp, sizeof(double));
+    sample_bin_M2 = (double *)calloc((size_t)Sample * (size_t)num_temp, sizeof(double));
+    sample_bin_A = (double *)calloc((size_t)Sample * (size_t)num_temp, sizeof(double));
+    if (ref_sx == NULL || ref_sy == NULL || ref_sz == NULL ||
+        accum_overlap == NULL || sample_q_tmax == NULL || sample_overlap == NULL ||
+        sample_bin_E == NULL || sample_bin_C == NULL || sample_bin_M2 == NULL ||
+        sample_bin_A == NULL) {
         fprintf(stderr, "Error: memory allocation failed\n");
         goto cleanup;
     }
@@ -140,32 +236,34 @@ int main(int argc, char **argv) {
         }
     }
 
-    printf("MC_simple stage1 (no MPI, no exchange MC)\n");
+    printf("MC_simple with Exchange Monte Carlo (no MPI)\n");
     printf("L=(%d,%d,%d) orb=%d spin_dim=%d All_N=%d ni_max=%d\n",
            X.Bind.Def.L_x, X.Bind.Def.L_y, X.Bind.Def.L_z, X.Bind.Def.orb_num,
            X.Bind.Def.spin_dim, All_N, ni_max);
-    printf("Burn_in=%d Total_Step=%d Sample=%d num_temp=%d\n", Burn_in,
-           Total_Step, Sample, num_temp);
+    printf("Burn_in=%d Total_Step=%d Sample=%d num_temp=%d exchange_interval=%d\n",
+           Burn_in, Total_Step, Sample, num_temp, exchange_interval);
 
-    /*
-     * Outer loop over independent samples (different RNG seeds).
-     * We average observables over these samples at the end.
-     */
     for (int_samp = 0; int_samp < Sample; int_samp++) {
         seed = base_seed + 8945UL * (unsigned long)int_samp;
         dsfmt_init_gen_rand(&dsfmt, seed);
 
-        /* Initialize spins and neighbor-based effective fields. */
-        initial(&dsfmt, &(X.Bind));
+        if (initial(&dsfmt, &(X.Bind), interaction_file) != 0) {
+            fprintf(stderr, "Error: failed to initialize lattice from '%s'\n",
+                    interaction_file);
+            goto cleanup;
+        }
 
         memset(X.Bind.Phys.ratio_1, 0, (size_t)num_temp * sizeof(int));
 
-        /* Burn-in: evolve the system without collecting measurements. */
         for (step = 0; step < Burn_in; step++) {
             for (int_T = 0; int_T < num_temp; int_T++) {
                 X.Bind.Def.int_T = int_T;
                 X.Bind.Phys.T = Ini_T + Delta_T * (double)int_T;
                 MC(&dsfmt, &(X.Bind));
+            }
+            if (exchange_interval > 0 && num_pairs > 0 &&
+                step % exchange_interval == 0) {
+                exchange_step(&dsfmt, &(X.Bind), NULL, NULL);
             }
         }
 
@@ -173,27 +271,47 @@ int main(int argc, char **argv) {
         memset(W.sample_E, 0, (size_t)num_temp * sizeof(double));
         memset(W.sample_E2, 0, (size_t)num_temp * sizeof(double));
         memset(W.sample_M2, 0, (size_t)num_temp * sizeof(double));
+        if (num_pairs > 0) {
+            memset(W.exchange_accept, 0, (size_t)num_pairs * sizeof(int));
+            memset(W.exchange_attempt, 0, (size_t)num_pairs * sizeof(int));
+        }
 
-        /* Measurement phase: update then record E/N, E^2, and M^2 each step. */
+        for (int_T = 0; int_T < num_temp; int_T++) {
+            memcpy(ref_sx[int_T], X.Bind.Def.sx[int_T], (size_t)All_N * sizeof(double));
+            memcpy(ref_sy[int_T], X.Bind.Def.sy[int_T], (size_t)All_N * sizeof(double));
+            memcpy(ref_sz[int_T], X.Bind.Def.sz[int_T], (size_t)All_N * sizeof(double));
+            accum_overlap[(size_t)int_T * (size_t)(Total_Step + 1)] += 1.0;
+            sample_overlap[(size_t)int_samp * (size_t)num_temp * (size_t)(Total_Step + 1) +
+                           (size_t)int_T * (size_t)(Total_Step + 1)] = 1.0;
+        }
+
         for (step = 0; step < Total_Step; step++) {
             for (int_T = 0; int_T < num_temp; int_T++) {
                 X.Bind.Def.int_T = int_T;
                 X.Bind.Phys.T = Ini_T + Delta_T * (double)int_T;
                 MC(&dsfmt, &(X.Bind));
             }
+            if (exchange_interval > 0 && num_pairs > 0 &&
+                step % exchange_interval == 0) {
+                exchange_step(&dsfmt, &(X.Bind), W.exchange_accept,
+                              W.exchange_attempt);
+            }
             for (int_T = 0; int_T < num_temp; int_T++) {
                 double e_total = X.Bind.Phys.Energy[int_T];
+                double q_val =
+                    spin_overlap(&(X.Bind), ref_sx, ref_sy, ref_sz, int_T);
                 W.sample_E[int_T] += e_total / (double)All_N;
                 W.sample_E2[int_T] += e_total * e_total;
                 W.sample_M2[int_T] += magnetization_sq(&(X.Bind), int_T);
+                accum_overlap[(size_t)int_T * (size_t)(Total_Step + 1) +
+                              (size_t)(step + 1)] += q_val;
+                sample_overlap[(size_t)int_samp * (size_t)num_temp *
+                                   (size_t)(Total_Step + 1) +
+                               (size_t)int_T * (size_t)(Total_Step + 1) +
+                               (size_t)(step + 1)] = q_val;
             }
         }
 
-        /*
-         * Convert step sums to per-sample averages.
-         * Specific heat per site:
-         *   C = ( <E^2> - <E>^2 ) / (N * T^2)
-         */
         for (int_T = 0; int_T < num_temp; int_T++) {
             double T_cur = Ini_T + Delta_T * (double)int_T;
             double e_avg = W.sample_E[int_T] / (double)Total_Step;
@@ -207,11 +325,28 @@ int main(int argc, char **argv) {
                 c_avg = (e2_avg - e_total_avg * e_total_avg) /
                         ((double)All_N * T_cur * T_cur);
             }
+
             W.accum_E[int_T] += e_avg;
             W.accum_C[int_T] += c_avg;
             W.accum_M2[int_T] += m2_avg;
             W.accum_A[int_T] += a_avg;
+
+            sample_bin_E[(size_t)int_samp * (size_t)num_temp + (size_t)int_T] = e_avg;
+            sample_bin_C[(size_t)int_samp * (size_t)num_temp + (size_t)int_T] = c_avg;
+            sample_bin_M2[(size_t)int_samp * (size_t)num_temp + (size_t)int_T] = m2_avg;
+            sample_bin_A[(size_t)int_samp * (size_t)num_temp + (size_t)int_T] = a_avg;
+            sample_q_tmax[(size_t)int_samp * (size_t)num_temp + (size_t)int_T] =
+                sample_overlap[(size_t)int_samp * (size_t)num_temp *
+                                   (size_t)(Total_Step + 1) +
+                               (size_t)int_T * (size_t)(Total_Step + 1) +
+                               (size_t)Total_Step];
         }
+
+        for (int_T = 0; int_T < num_pairs; int_T++) {
+            W.accum_exchange_accept[int_T] += W.exchange_accept[int_T];
+            W.accum_exchange_attempt[int_T] += W.exchange_attempt[int_T];
+        }
+
         printf("sample %d/%d done (seed=%lu)\n", int_samp + 1, Sample, seed);
     }
 
@@ -224,7 +359,6 @@ int main(int argc, char **argv) {
     }
 
     printf("\n# T  E_per_site  C_per_site  M2  acceptance\n");
-    /* Final average over independent samples. */
     for (int_T = 0; int_T < num_temp; int_T++) {
         double T = Ini_T + Delta_T * (double)int_T;
         double E = W.accum_E[int_T] / (double)Sample;
@@ -237,12 +371,138 @@ int main(int argc, char **argv) {
         }
     }
 
+    if (num_pairs > 0) {
+        printf("\n# Exchange acceptance per pair (T_i, T_{i+1}):\n");
+        if (fp != NULL) {
+            fprintf(fp, "\n# Exchange acceptance per pair (T_i, T_{i+1}):\n");
+        }
+        for (int_T = 0; int_T < num_pairs; int_T++) {
+            double T_lo = Ini_T + Delta_T * (double)int_T;
+            double T_hi = Ini_T + Delta_T * (double)(int_T + 1);
+            double acc = (W.accum_exchange_attempt[int_T] > 0)
+                             ? (double)W.accum_exchange_accept[int_T] /
+                                   (double)W.accum_exchange_attempt[int_T]
+                             : 0.0;
+            printf("# pair (%d,%d): T=%.4f-%.4f  accept=%d/%d  rate=%.4f\n",
+                   int_T, int_T + 1, T_lo, T_hi,
+                   W.accum_exchange_accept[int_T],
+                   W.accum_exchange_attempt[int_T], acc);
+            if (fp != NULL) {
+                fprintf(fp,
+                        "# pair (%d,%d): T=%.4f-%.4f  accept=%d/%d  rate=%.4f\n",
+                        int_T, int_T + 1, T_lo, T_hi,
+                        W.accum_exchange_accept[int_T],
+                        W.accum_exchange_attempt[int_T], acc);
+            }
+        }
+    }
+
     if (fp != NULL)
         fclose(fp);
+
+    fp_overlap = fopen("MC_simple_overlap.dat", "w");
+    if (fp_overlap != NULL) {
+        fprintf(fp_overlap, "# step");
+        for (int_T = 0; int_T < num_temp; int_T++) {
+            double T = Ini_T + Delta_T * (double)int_T;
+            fprintf(fp_overlap, "  q_T%.6f", T);
+        }
+        fprintf(fp_overlap, "\n");
+        for (step = 0; step <= Total_Step; step++) {
+            fprintf(fp_overlap, "%d", step);
+            for (int_T = 0; int_T < num_temp; int_T++) {
+                double q = accum_overlap[(size_t)int_T * (size_t)(Total_Step + 1) +
+                                         (size_t)step] /
+                           (double)Sample;
+                fprintf(fp_overlap, "  %.10f", q);
+            }
+            fprintf(fp_overlap, "\n");
+        }
+        fclose(fp_overlap);
+    } else {
+        fprintf(stderr, "Warning: cannot open MC_simple_overlap.dat for write\n");
+    }
+
+    fp_overlap = fopen("MC_simple_q_tmax_samples.dat", "w");
+    if (fp_overlap != NULL) {
+        fprintf(fp_overlap, "# sample");
+        for (int_T = 0; int_T < num_temp; int_T++) {
+            double T = Ini_T + Delta_T * (double)int_T;
+            fprintf(fp_overlap, "  q_T%.6f", T);
+        }
+        fprintf(fp_overlap, "\n");
+        for (int_samp = 0; int_samp < Sample; int_samp++) {
+            fprintf(fp_overlap, "%d", int_samp);
+            for (int_T = 0; int_T < num_temp; int_T++) {
+                double q =
+                    sample_q_tmax[(size_t)int_samp * (size_t)num_temp + (size_t)int_T];
+                fprintf(fp_overlap, "  %.10f", q);
+            }
+            fprintf(fp_overlap, "\n");
+        }
+        fclose(fp_overlap);
+    } else {
+        fprintf(stderr,
+                "Warning: cannot open MC_simple_q_tmax_samples.dat for write\n");
+    }
+
+    fp_overlap = fopen("MC_simple_overlap_samples.dat", "w");
+    if (fp_overlap != NULL) {
+        fprintf(fp_overlap, "# sample  step");
+        for (int_T = 0; int_T < num_temp; int_T++) {
+            double T = Ini_T + Delta_T * (double)int_T;
+            fprintf(fp_overlap, "  q_T%.6f", T);
+        }
+        fprintf(fp_overlap, "\n");
+        for (int_samp = 0; int_samp < Sample; int_samp++) {
+            for (step = 0; step <= Total_Step; step++) {
+                fprintf(fp_overlap, "%d  %d", int_samp, step);
+                for (int_T = 0; int_T < num_temp; int_T++) {
+                    size_t idx = (size_t)int_samp * (size_t)num_temp *
+                                     (size_t)(Total_Step + 1) +
+                                 (size_t)int_T * (size_t)(Total_Step + 1) +
+                                 (size_t)step;
+                    fprintf(fp_overlap, "  %.10f", sample_overlap[idx]);
+                }
+                fprintf(fp_overlap, "\n");
+            }
+        }
+        fclose(fp_overlap);
+    } else {
+        fprintf(stderr,
+                "Warning: cannot open MC_simple_overlap_samples.dat for write\n");
+    }
+
+    fp_overlap = fopen("MC_simple_sample_bins.dat", "w");
+    if (fp_overlap != NULL) {
+        fprintf(fp_overlap, "# sample  T  E_per_site  C_per_site  M2  acceptance\n");
+        for (int_samp = 0; int_samp < Sample; int_samp++) {
+            for (int_T = 0; int_T < num_temp; int_T++) {
+                double T = Ini_T + Delta_T * (double)int_T;
+                size_t idx = (size_t)int_samp * (size_t)num_temp + (size_t)int_T;
+                fprintf(fp_overlap, "%d  %.8f  %.10f  %.10f  %.10f  %.10f\n",
+                        int_samp, T, sample_bin_E[idx], sample_bin_C[idx],
+                        sample_bin_M2[idx], sample_bin_A[idx]);
+            }
+        }
+        fclose(fp_overlap);
+    } else {
+        fprintf(stderr, "Warning: cannot open MC_simple_sample_bins.dat for write\n");
+    }
 
     rc = 0;
 
 cleanup:
+    free(sample_bin_E);
+    free(sample_bin_C);
+    free(sample_bin_M2);
+    free(sample_bin_A);
+    free(sample_overlap);
+    free(sample_q_tmax);
+    free(accum_overlap);
+    free_double_2d_local(ref_sx, num_temp);
+    free_double_2d_local(ref_sy, num_temp);
+    free_double_2d_local(ref_sz, num_temp);
     free_work_arrays(&W);
     free_minimal_mc_arrays(&X);
     return rc;

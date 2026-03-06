@@ -9,6 +9,7 @@ add_executable(MC_simple
     input_parser.c
     lattice.c
     mc_update.c
+    exmc.c
     dSFMT.c
 )
 target_compile_definitions(MC_simple PRIVATE

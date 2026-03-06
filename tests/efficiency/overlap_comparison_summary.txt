@@ -1,0 +1,7 @@
+Overlap Comparison: Normal MC vs Exchange MC
+stderr estimated from per-Sample variance (within one run)
+n_normal=20, n_exchange=20
+
+T=1.0000: sum_t q_normal=4993.475781, sum_t q_exchange=504.418750, ratio(exchange/normal)=0.101016
+T=1.9000: sum_t q_normal=4327.664453, sum_t q_exchange=-194.380469, ratio(exchange/normal)=-0.044916
+T=2.5000: sum_t q_normal=-22.410547, sum_t q_exchange=11.097656, ratio(exchange/normal)=-0.495198

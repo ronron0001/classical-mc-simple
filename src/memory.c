@@ -137,8 +137,12 @@ void free_minimal_mc_arrays(struct MCMainCalStruct *X) {
  * E, E^2, specific heat, M^2, and acceptance during step/sample averaging.
  */
 int allocate_work_arrays(int num_temp, struct SimpleWorkArrays *W) {
+    int num_pairs;
+
     if (num_temp <= 0 || W == NULL)
         return -1;
+
+    num_pairs = (num_temp > 1) ? (num_temp - 1) : 0;
 
     W->accum_E = (double *)calloc((size_t)num_temp, sizeof(double));
     W->accum_C = (double *)calloc((size_t)num_temp, sizeof(double));
@@ -147,10 +151,28 @@ int allocate_work_arrays(int num_temp, struct SimpleWorkArrays *W) {
     W->sample_E = (double *)calloc((size_t)num_temp, sizeof(double));
     W->sample_E2 = (double *)calloc((size_t)num_temp, sizeof(double));
     W->sample_M2 = (double *)calloc((size_t)num_temp, sizeof(double));
+    W->exchange_accept = (num_pairs > 0)
+                             ? (int *)calloc((size_t)num_pairs, sizeof(int))
+                             : NULL;
+    W->exchange_attempt = (num_pairs > 0)
+                              ? (int *)calloc((size_t)num_pairs, sizeof(int))
+                              : NULL;
+    W->accum_exchange_accept = (num_pairs > 0)
+                                   ? (int *)calloc((size_t)num_pairs, sizeof(int))
+                                   : NULL;
+    W->accum_exchange_attempt = (num_pairs > 0)
+                                    ? (int *)calloc((size_t)num_pairs, sizeof(int))
+                                    : NULL;
 
     if (W->accum_E == NULL || W->accum_C == NULL || W->accum_M2 == NULL ||
         W->accum_A == NULL || W->sample_E == NULL || W->sample_E2 == NULL ||
         W->sample_M2 == NULL) {
+        free_work_arrays(W);
+        return -1;
+    }
+    if (num_pairs > 0 &&
+        (W->exchange_accept == NULL || W->exchange_attempt == NULL ||
+         W->accum_exchange_accept == NULL || W->accum_exchange_attempt == NULL)) {
         free_work_arrays(W);
         return -1;
     }
@@ -169,4 +191,8 @@ void free_work_arrays(struct SimpleWorkArrays *W) {
     free(W->sample_E);
     free(W->sample_E2);
     free(W->sample_M2);
+    free(W->exchange_accept);
+    free(W->exchange_attempt);
+    free(W->accum_exchange_accept);
+    free(W->accum_exchange_attempt);
 }

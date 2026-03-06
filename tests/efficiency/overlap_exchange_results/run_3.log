@@ -1,0 +1,63 @@
+read_param: Burn_in=5000 Total_Step=10000 Sample=40 num_temp=6
+read_param: Ini_T=1.000000 Delta_T=0.300000 lambda=1.000000 H=0.000000 spin_dim=1
+read_param: exchange_interval=1
+read_lattice: L_x=16 L_y=16 L_z=1 orb_num=1 All_N=256
+read_interaction: Read 2 unique bonds, ni_max = 4
+MC_simple with Exchange Monte Carlo (no MPI)
+L=(16,16,1) orb=1 spin_dim=1 All_N=256 ni_max=4
+Burn_in=5000 Total_Step=10000 Sample=40 num_temp=6 exchange_interval=1
+sample 1/40 done (seed=190003)
+sample 2/40 done (seed=198948)
+sample 3/40 done (seed=207893)
+sample 4/40 done (seed=216838)
+sample 5/40 done (seed=225783)
+sample 6/40 done (seed=234728)
+sample 7/40 done (seed=243673)
+sample 8/40 done (seed=252618)
+sample 9/40 done (seed=261563)
+sample 10/40 done (seed=270508)
+sample 11/40 done (seed=279453)
+sample 12/40 done (seed=288398)
+sample 13/40 done (seed=297343)
+sample 14/40 done (seed=306288)
+sample 15/40 done (seed=315233)
+sample 16/40 done (seed=324178)
+sample 17/40 done (seed=333123)
+sample 18/40 done (seed=342068)
+sample 19/40 done (seed=351013)
+sample 20/40 done (seed=359958)
+sample 21/40 done (seed=368903)
+sample 22/40 done (seed=377848)
+sample 23/40 done (seed=386793)
+sample 24/40 done (seed=395738)
+sample 25/40 done (seed=404683)
+sample 26/40 done (seed=413628)
+sample 27/40 done (seed=422573)
+sample 28/40 done (seed=431518)
+sample 29/40 done (seed=440463)
+sample 30/40 done (seed=449408)
+sample 31/40 done (seed=458353)
+sample 32/40 done (seed=467298)
+sample 33/40 done (seed=476243)
+sample 34/40 done (seed=485188)
+sample 35/40 done (seed=494133)
+sample 36/40 done (seed=503078)
+sample 37/40 done (seed=512023)
+sample 38/40 done (seed=520968)
+sample 39/40 done (seed=529913)
+sample 40/40 done (seed=538858)
+
+# T  E_per_site  C_per_site  M2  acceptance
+1.00000000  -1.9971748047  0.0232934745  0.9985643793  0.0007257031
+1.30000000  -1.9802461719  0.1008122004  0.9896173828  0.0052121484
+1.60000000  -1.9283946484  0.2618944742  0.9600398386  0.0200273633
+1.90000000  -1.8092988281  0.5648999728  0.8816905269  0.0575990918
+2.20000000  -1.5490012109  1.3011463746  0.6501306804  0.1494621191
+2.50000000  -1.1305249609  1.0622068357  0.2008738585  0.3138608691
+
+# Exchange acceptance per pair (T_i, T_{i+1}):
+# pair (0,1): T=1.0000-1.3000  accept=249609/400000  rate=0.6240
+# pair (1,2): T=1.3000-1.6000  accept=146043/400000  rate=0.3651
+# pair (2,3): T=1.6000-1.9000  accept=93435/400000  rate=0.2336
+# pair (3,4): T=1.9000-2.2000  accept=53231/400000  rate=0.1331
+# pair (4,5): T=2.2000-2.5000  accept=31270/400000  rate=0.0782

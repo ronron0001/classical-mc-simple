@@ -1,7 +1,7 @@
 # Simulation parameters: 2D Ising model on square lattice (quick setting)
-Burn_in    = 500
-Total_Step = 3000
-Sample     = 2
+Burn_in    = 1000
+Total_Step = 5000
+Sample     = 20
 num_temp   = 6
 Ini_T      = 1.0
 Delta_T    = 0.3
